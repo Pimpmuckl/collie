@@ -33,7 +33,7 @@ COLLIE_HOST="127.0.0.1"
   Write-CollieActionLauncher
   $launcher = Join-Path $script:PluginRoot "build\collie-action.exe"
   $launcherVersion = (& $launcher version | Out-String).Trim()
-  Assert-Contains $launcherVersion "0.23.0" "action launcher execution"
+  Assert-Equal $launcherVersion (Get-CollieVersion) "action launcher execution"
 
   "not valid" | Set-Content -LiteralPath (Join-Path $temp "invalid.env") -Encoding Ascii
   try {
@@ -97,6 +97,7 @@ COLLIE_HOST="127.0.0.1"
   function Get-ScheduledTask($TaskName) { [pscustomobject]@{ TaskName = $TaskName; State = "Ready" } }
   function Disable-ScheduledTask($TaskName) { $script:disabled += $TaskName }
   function Stop-ScheduledTask($TaskName) { $script:stopped += $TaskName }
+  function Unregister-ScheduledTask($TaskName, [switch]$Confirm) { $script:unregistered += $TaskName }
 
   Register-CollieTask | Out-Null
   Assert-Equal $script:registered.TaskName "herdr.collie-test" "task ownership"
@@ -121,6 +122,16 @@ COLLIE_HOST="127.0.0.1"
   Stop-Collie | Out-Null
   Assert-Equal ($script:disabled -join ",") "herdr.collie-test" "stop disables only Collie's task"
   Assert-Equal ($script:stopped -join ",") "herdr.collie-test" "stop stops only Collie's task"
+
+  $script:unregistered = @()
+  function Remove-ManagedServe { throw "Tailscale Serve changes require Administrator PowerShell" }
+  try {
+    Uninstall-Collie | Out-Null
+    throw "uninstall accepted incomplete Tailscale cleanup"
+  } catch {
+    Assert-Contains $_.Exception.Message "Administrator PowerShell" "uninstall reports Tailscale cleanup"
+  }
+  Assert-Equal ($script:unregistered -join ",") "herdr.collie-test" "uninstall always removes Collie's task"
 
   function Resolve-Tailscale { "C:\fake\tailscale.exe" }
   function Get-TailscaleDnsName { "host.example.ts.net" }

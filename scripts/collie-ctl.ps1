@@ -124,7 +124,7 @@ function Write-CollieActionLauncher {
   $launcherDir = Join-Path $script:PluginRoot "build"
   New-Item -ItemType Directory -Force -Path $launcherDir | Out-Null
   $launcher = Join-Path $launcherDir "collie-action.exe"
-  Remove-Item -LiteralPath $launcher -ErrorAction SilentlyContinue
+  if (Test-Path -LiteralPath $launcher) { return }
   Add-Type `
     -Path (Join-Path $PSScriptRoot "collie-action.cs") `
     -OutputAssembly $launcher `
@@ -499,27 +499,37 @@ function Stop-Collie {
 
 function Uninstall-Collie {
   Stop-Collie
-  Remove-ManagedServe
-  if (Get-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskName $script:TaskName -Confirm:$false
+  try {
+    Remove-ManagedServe
+  } finally {
+    if (Get-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue) {
+      Unregister-ScheduledTask -TaskName $script:TaskName -Confirm:$false
+    }
   }
   Write-Output "OK uninstalled: task stopped and removed; Collie's Tailscale mapping removed"
   Write-Output "  kept: $($script:EnvFile) and the checkout"
 }
 
-function Update-Collie {
-  & git -C $script:PluginRoot pull --ff-only
-  Assert-LastExit "git pull"
+function Apply-CollieUpdate {
   Invoke-CollieBuild
   Stop-Collie
   Start-Collie
   try {
     & herdr plugin link $script:PluginRoot | Out-Null
+    Assert-LastExit "herdr plugin link"
     Write-Output "herdr registry refreshed (re-linked)"
   } catch {
     Write-Warning "could not refresh the Herdr registry; run: herdr plugin link `"$($script:PluginRoot)`""
   }
   Write-Output "OK update complete"
+}
+
+function Update-Collie {
+  & git -C $script:PluginRoot pull --ff-only
+  Assert-LastExit "git pull"
+  $powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
+  & $powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "collie-ctl.ps1") _apply-update
+  Assert-LastExit "apply update"
 }
 
 function Invoke-CollieBridge {
@@ -562,6 +572,7 @@ switch ($Command) {
   "restart" { Stop-Collie; Start-Collie }
   "uninstall" { Uninstall-Collie }
   "update" { Update-Collie }
+  "_apply-update" { Apply-CollieUpdate }
   "serve" { Invoke-CollieServe }
   "unserve" { Remove-ManagedServe }
   "status" { Show-CollieStatus }
