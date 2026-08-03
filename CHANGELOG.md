@@ -4,7 +4,17 @@ All notable changes to Collie are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/). The newest `## [x.y.z]` heading **must** match the
 `version` in `herdr-plugin.toml`, `package.json`, and `web/package.json` (enforced by
-`scripts/check-version.sh`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
+`scripts/check-version.ts`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
+
+## [0.24.1] - 2026-08-03
+
+### Added
+
+- Windows now exposes the direct `push-test` diagnostic and includes the active Tailscale Serve mapping in `status` output (e4fe102)
+
+### Changed
+
+- Fork installs and update notices follow `Pimpmuckl/collie`; CI covers Linux, macOS and Windows on standard public runners, and one Bun version gate replaces the duplicate shell and PowerShell checks (e4fe102)
 
 ## [0.24.0] - 2026-08-03
 
