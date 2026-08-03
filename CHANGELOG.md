@@ -19,6 +19,7 @@ All notable changes to Collie are recorded here. The format follows
 ### Fixed
 
 - Windows refuses opposite-protocol and raw Tailscale listeners even without a root handler, and a temporary Herdr outage no longer disables the supervised bridge (ee04af8, 5cde27a)
+- Windows scheduled tasks retain resolved Herdr paths, failed web swaps restore the live bundle, and stale recycled PID records no longer block bridge startup (feb45c7)
 
 ## [0.24.0] - 2026-08-03
 
