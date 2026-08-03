@@ -138,7 +138,8 @@ function Invoke-CollieBuild([string]$LauncherOutput) {
   New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
   Write-CollieActionLauncher $LauncherOutput
   if ($env:SKIP_VERSION_CHECK -ne "1") {
-    & (Join-Path $PSScriptRoot "check-version.ps1")
+    & $bun run (Join-Path $PSScriptRoot "check-version.ts")
+    Assert-LastExit "version consistency check"
   }
 
   Invoke-InDirectory $script:PluginRoot {
@@ -423,6 +424,26 @@ function Get-CollieUrl {
   return "https://$dnsName"
 }
 
+function Show-CollieServeStatus {
+  if ($script:SkipServe) {
+    Write-Output "  serve config: skipped (COLLIE_SKIP_SERVE=1)"
+    return
+  }
+
+  Write-Output "  serve config:"
+  $tailscale = Resolve-Tailscale
+  if (-not $tailscale) {
+    Write-Output "    (tailscale not found)"
+    return
+  }
+  $status = & $tailscale serve status 2>$null
+  if ($LASTEXITCODE -eq 0 -and $status) {
+    $status | ForEach-Object { Write-Output "    $_" }
+  } else {
+    Write-Output "    (unavailable)"
+  }
+}
+
 function Show-CollieStatus {
   $task = Get-ScheduledTask -TaskName $script:TaskName -ErrorAction SilentlyContinue
   $service = if ($task) { "Task Scheduler ($($script:TaskName)) - $($task.State)" } else { "not supervised" }
@@ -438,6 +459,7 @@ function Show-CollieStatus {
   Write-Output "    local     http://127.0.0.1:$($script:Port)"
   Write-Output "    remote    $(Get-CollieUrl)"
   Write-Output ""
+  Show-CollieServeStatus
 }
 
 function Start-Collie {
@@ -559,6 +581,12 @@ function Update-Collie {
   Assert-LastExit "apply update"
 }
 
+function Invoke-ColliePushTest([string[]]$PushArgs) {
+  $bun = Resolve-Bun
+  & $bun run (Join-Path $PSScriptRoot "push-test.ts") @PushArgs
+  Assert-LastExit "push test"
+}
+
 function Preserve-CollieCrashLogs {
   if (Test-Path -LiteralPath $script:LogFile) {
     Move-Item -LiteralPath $script:LogFile -Destination $script:PreviousLogFile -Force
@@ -616,6 +644,7 @@ switch ($Command) {
   "status" { Show-CollieStatus }
   "url" { Get-CollieUrl }
   "version" { Get-CollieVersion }
+  "push-test" { Invoke-ColliePushTest $CommandArgs }
   "logs" {
     $lines = if ($CommandArgs -and $CommandArgs.Count -gt 0) { [int]$CommandArgs[0] } else { 50 }
     if (Test-Path -LiteralPath $script:PreviousLogFile) { Write-Output "previous bridge crash (stdout):"; Get-Content -LiteralPath $script:PreviousLogFile -Tail $lines -Encoding UTF8 }
@@ -625,6 +654,6 @@ switch ($Command) {
   }
   "_exec-bridge" { Invoke-CollieBridge }
   default {
-    Write-Error "usage: collie-ctl.ps1 {start|stop|restart|uninstall|update|version|build|serve|unserve|status|url|logs}"
+    Write-Error "usage: collie-ctl.ps1 {start|stop|restart|uninstall|update|version|push-test|build|serve|unserve|status|url|logs}"
   }
 }

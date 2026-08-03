@@ -63,11 +63,20 @@ COLLIE_HOST="127.0.0.1"
   }
   Remove-Item -LiteralPath $script:PidFile
 
+  $pushArgsFile = Join-Path $temp "push-args.txt"
+  $fakeBun = Join-Path $temp "bun.cmd"
+  "@echo off`r`necho %* > `"$pushArgsFile`"`r`n" | Set-Content -LiteralPath $fakeBun -Encoding Ascii
+  function Resolve-Bun { $fakeBun }
+  Invoke-ColliePushTest @("Test title", "Test body", "pane-1")
+  $pushArgs = Get-Content -LiteralPath $pushArgsFile -Raw
+  Assert-Contains $pushArgs "push-test.ts" "push test script"
+  Assert-Contains $pushArgs "Test title" "push test arguments"
+  Assert-Contains $pushArgs "pane-1" "push test pane"
+
   $script:registered = $null
   $script:enabled = @()
   $script:disabled = @()
   $script:stopped = @()
-  function Resolve-Bun { "C:\fake\bun.exe" }
   function Test-Administrator { $false }
   function New-ScheduledTaskAction($Execute, $Argument, $WorkingDirectory) {
     [pscustomobject]@{ Execute = $Execute; Argument = $Argument; WorkingDirectory = $WorkingDirectory }
@@ -144,7 +153,16 @@ COLLIE_HOST="127.0.0.1"
   }
   Assert-Equal ($script:unregistered -join ",") "herdr.collie-test" "uninstall always removes Collie's task"
 
-  function Resolve-Tailscale { "C:\fake\tailscale.exe" }
+  $fakeTailscale = Join-Path $temp "tailscale.cmd"
+  "@echo off`r`nif `%1`==serve if `%2`==status echo https://host.example.ts.net`r`n" |
+    Set-Content -LiteralPath $fakeTailscale -Encoding Ascii
+  function Resolve-Tailscale { $fakeTailscale }
+  function Test-HerdrReady { $true }
+  function Get-CollieUrl { "https://host.example.ts.net" }
+  $statusOutput = Show-CollieStatus | Out-String
+  Assert-Contains $statusOutput "serve config:" "status includes Tailscale configuration"
+  Assert-Contains $statusOutput "https://host.example.ts.net" "status includes Tailscale mapping"
+
   function Get-TailscaleDnsName { "host.example.ts.net" }
   function Remove-ManagedServe {}
   function Get-TailscaleStatus {

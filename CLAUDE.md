@@ -1,6 +1,6 @@
 # CLAUDE.md — working agreement for this repo
 
-**Collie** (repo `AltanS/collie`) — a phone web UI for your Herdr agent herd, served over
+**Collie** (repo `Pimpmuckl/collie`, Windows fork of `AltanS/collie`) — a phone web UI for your Herdr agent herd, served over
 Tailscale. A mobile-first PWA (Vite + React + TS + Tailwind v4 + shadcn) plus a Bun/TS bridge that
 talks to Herdr's Unix socket, letting you monitor and reply to agents from a phone. The Herdr
 plugin id is `herdr.collie` (manifest: `herdr-plugin.toml`). Orientation:
@@ -38,12 +38,12 @@ manifest) you MUST:
    Fixed). Use the real date. **Style: super crisp and short** — one line per change, no prose
    paragraphs, and cite the feature's short commit hash at the end of the line (`… (abc1234)`).
    Land features as their own commits first, then cut the release commit so the entry can cite them.
-3. **Run `scripts/check-version.sh`** — it must print `✓`.
+3. **Run `bun run scripts/check-version.ts`** — it must print `OK`.
 
 Doc-only changes (`*.md`) don't need a bump. This is enforced two ways, but **you are the first
 line — do it as part of the change, not after**:
 
-- `scripts/check-version.sh` runs inside `scripts/collie-ctl.sh build` (a release can't build while
+- `scripts/check-version.ts` runs inside both platform control scripts' `build` command (a release can't build while
   versions disagree).
 - A **git pre-commit hook** (`scripts/git-hooks/pre-commit`, activate once with
   `scripts/install-hooks.sh`) blocks commits where functional code changed but the version didn't.
@@ -76,7 +76,8 @@ the unit name; the Herdr action runs from anywhere.
 - **Tests:** frontend `cd web && bun run test` (Vitest + jsdom + Testing Library + MSW; no headless
   browser); backend `bun run test` at the root — Bun's own runner over every pure-logic module in
   `bridge/` (access checks, state engine, config, journal adapters, notifications, uploads, …) plus
-  `scripts/collie-ctl.test.sh`, which exercises the ctl lifecycle in a sandboxed HOME.
+  the platform lifecycle suite selected by `scripts/test-ctl.ts`, which exercises the ctl lifecycle
+  in a sandboxed config directory.
   A **pre-push hook** (`scripts/git-hooks/pre-push`) runs **both** before
   every push — override once with `SKIP_TESTS=1 git push`. The bits that genuinely need `Bun.serve` /
   `Bun.connect` (HTTP handlers, the socket client) stay unit-untested — Vitest-on-Node can't run them,

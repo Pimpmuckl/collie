@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Versioning guard. Install with: scripts/install-hooks.sh (sets core.hooksPath).
-# 1) versions must be consistent (check-version.sh)
+# 1) versions must be consistent (check-version.ts)
 # 2) if functional code changed, the canonical version must differ from HEAD (i.e. you bumped it)
 # Override a single commit with: SKIP_VERSION_CHECK=1 git commit …
 set -euo pipefail
@@ -13,7 +13,7 @@ if [ "${SKIP_VERSION_CHECK:-}" = "1" ]; then
 fi
 
 # (1) consistency
-"$ROOT/scripts/check-version.sh" >/dev/null
+bun run "$ROOT/scripts/check-version.ts" >/dev/null
 
 # (2) bump-on-change — any functional path in this set requires a version bump.
 staged="$(git diff --cached --name-only)"

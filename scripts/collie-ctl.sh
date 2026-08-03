@@ -149,7 +149,7 @@ cmd_build() {
   # Version gate: refuse to build a release whose version files / CHANGELOG disagree.
   # Override (e.g. mid-refactor) with SKIP_VERSION_CHECK=1.
   if [ "${SKIP_VERSION_CHECK:-}" != "1" ]; then
-    bash "${PLUGIN_ROOT}/scripts/check-version.sh"
+    "$BUN" run "${PLUGIN_ROOT}/scripts/check-version.ts"
   fi
   # Install BOTH dependency trees before typechecking. The root typecheck (tsconfig `types: ["bun"]`)
   # resolves @types/bun from the ROOT node_modules; a fresh Herdr checkout ships neither tree, so

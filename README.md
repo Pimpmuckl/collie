@@ -127,6 +127,10 @@ Narrow the blast radius with Tailscale ACLs and `COLLIE_TRUSTED_USER`. Provided 
 
 ## Requirements
 
+> This fork adds native Windows support to [`AltanS/collie`](https://github.com/AltanS/collie).
+> Install from `Pimpmuckl/collie` to get the Windows launcher and lifecycle controller described
+> below.
+
 On the **host** (the tailnet node your agents run on):
 
 | Tool | Why |
@@ -154,14 +158,14 @@ On the host, not your phone. Two ways in.
 **From GitHub (turnkey)** — Herdr clones and builds for you:
 
 ```bash
-herdr plugin install AltanS/collie
+herdr plugin install Pimpmuckl/collie
 herdr plugin action invoke start --plugin herdr.collie
 ```
 
 **From a local clone (for development)** — build once, then register by path:
 
 ```bash
-git clone https://github.com/AltanS/collie.git && cd collie
+git clone https://github.com/Pimpmuckl/collie.git && cd collie
 bash scripts/collie-ctl.sh build
 herdr plugin link "$(pwd)"
 herdr plugin action invoke start --plugin herdr.collie
@@ -317,7 +321,8 @@ cp .env.example "$(herdr plugin config-dir herdr.collie)/.env"
 The bridge reads `.env` only at startup — after any edit, `scripts/collie-ctl.sh restart`. See
 [`.env.example`](./.env.example) for the full option list — commonly `COLLIE_PORT`, or
 `COLLIE_SERVE_MODE=http` (Headscale / `.internal` domains; read by the control script when it runs
-`tailscale serve`).
+`tailscale serve`). The in-app release feed follows `Pimpmuckl/collie`; override it with
+`COLLIE_UPDATE_REPO` only when this checkout tracks a different repository.
 
 **Custom domain or reverse proxy?** See
 [Variant C](#variant-c--reverse-proxy-as-the-only-front-door-no-tailscale) for the full reverse-proxy
@@ -832,6 +837,10 @@ power as that Herdr session. The direct control-script form is:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 status
 ```
 
+Replace `status` with `start`, `stop`, `restart`, `update`, `version`, `url`, `logs`, `serve`,
+`unserve`, `build`, or `push-test` for the other direct commands. The normal Herdr actions remain the
+preferred location-independent interface.
+
 Tailscale's Windows CLI requires an Administrator terminal to change Serve mappings. A normal
 `start` still brings up the loopback bridge and prints the exact elevated `serve` command when this
 one-time step is needed. Run that command from Terminal (Admin), then use `status` or `url` normally.
@@ -869,6 +878,12 @@ Collie pushes when an agent goes **blocked** or **done**, with the agent's messa
 
 ```bash
 bash scripts/collie-ctl.sh push-test                 # or: push-test "Title" "Body"
+```
+
+On Windows:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 push-test
 ```
 
 ## Troubleshooting

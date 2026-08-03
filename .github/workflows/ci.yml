@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # Standard hosted runners are free for this public fork. Do not use billed larger runners.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -24,12 +25,7 @@ jobs:
 
       # The MANDATORY invariant: the three version files + the newest CHANGELOG heading must agree.
       - name: Version consistency
-        if: runner.os != 'Windows'
-        run: bash scripts/check-version.sh
-      - name: Version consistency (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: scripts/check-version.ps1
+        run: bun run scripts/check-version.ts
 
       - name: Install (root)
         run: bun install --frozen-lockfile
