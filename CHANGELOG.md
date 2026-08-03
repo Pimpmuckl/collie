@@ -16,6 +16,10 @@ All notable changes to Collie are recorded here. The format follows
 
 - Fork installs and update notices follow `Pimpmuckl/collie`; CI covers Linux, macOS and Windows on standard public runners, and one Bun version gate replaces the duplicate shell and PowerShell checks (e4fe102)
 
+### Fixed
+
+- Windows refuses opposite-protocol Tailscale listeners even without a root handler, and a temporary Herdr outage no longer disables the supervised bridge (ee04af8)
+
 ## [0.24.0] - 2026-08-03
 
 ### Added
