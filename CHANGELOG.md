@@ -6,6 +6,18 @@ All notable changes to Collie are recorded here. The format follows
 `version` in `herdr-plugin.toml`, `package.json`, and `web/package.json` (enforced by
 `scripts/check-version.sh`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
 
+## [0.24.0] - 2026-08-03
+
+### Added
+
+- **Windows is a supported host.** The normal Herdr actions now build and invoke a native Windows launcher, supervise the bridge with Task Scheduler, use the Windows named-pipe transport and native paths, and manage only Collie's recorded Tailscale Serve root. The task runs limited by default; an elevated Herdr session requires an explicit `COLLIE_TASK_RUN_LEVEL=highest` opt-in because phone actions inherit that Administrator power (8693667)
+- CI now runs the bridge and launcher lifecycle suites on both Ubuntu and Windows. The Windows suite owns the task definition, process-tree teardown, `.env` parsing, Tailscale collision refusal, and native launcher contract (8693667)
+
+### Fixed
+
+- Stopping or restarting the Windows task now terminates only its recorded PowerShell/Bun process tree, so Task Scheduler cannot strand an old bridge on port 8787. A stale or reused PID is refused unless its command line still identifies Collie (8693667)
+- Backend fixtures use native path helpers, so all 523 bridge tests run on Windows; the two POSIX `0600` assertions are explicitly Unix-only because Windows does not expose those mode bits (8693667)
+
 ## [0.23.0] - 2026-08-03
 
 ### Added
