@@ -161,19 +161,17 @@ function Install-CollieWebDist([string]$WebRoot) {
   Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-function Invoke-CollieBuild([string]$LauncherOutput) {
-  $bun = Resolve-Bun
+function Invoke-CollieApplicationBuild([string]$Bun) {
   New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
-  Write-CollieActionLauncher $LauncherOutput
   if ($env:SKIP_VERSION_CHECK -ne "1") {
-    & $bun run (Join-Path $PSScriptRoot "check-version.ts")
+    & $Bun run (Join-Path $PSScriptRoot "check-version.ts")
     Assert-LastExit "version consistency check"
   }
 
   Invoke-InDirectory $script:PluginRoot {
-    & $bun install
+    & $Bun install
     Assert-LastExit "root bun install"
-    & $bun run typecheck
+    & $Bun run typecheck
     Assert-LastExit "root typecheck"
   }
 
@@ -181,20 +179,26 @@ function Invoke-CollieBuild([string]$LauncherOutput) {
   $staging = Join-Path $webRoot "dist-staging"
   if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
   Invoke-InDirectory $webRoot {
-    & $bun install
+    & $Bun install
     Assert-LastExit "web bun install"
-    & $bun run typecheck
+    & $Bun run typecheck
     Assert-LastExit "web typecheck"
-    & $bun run build -- --outDir dist-staging --emptyOutDir
+    & $Bun run build -- --outDir dist-staging --emptyOutDir
     Assert-LastExit "web build"
   }
   Install-CollieWebDist $webRoot
 }
 
+function Invoke-CollieBuild([string]$LauncherOutput) {
+  $bun = Resolve-Bun
+  Write-CollieActionLauncher $LauncherOutput
+  Invoke-CollieApplicationBuild $bun
+}
+
 function Ensure-CollieBuild {
   if (Test-Path -LiteralPath (Join-Path $script:PluginRoot "web\dist\index.html")) { return }
   Write-Output "building web UI (first run)..."
-  Invoke-CollieBuild
+  Invoke-CollieApplicationBuild (Resolve-Bun)
 }
 
 function Register-CollieTask {

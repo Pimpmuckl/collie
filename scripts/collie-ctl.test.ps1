@@ -42,6 +42,19 @@ COLLIE_HOST="127.0.0.1"
   Install-CollieActionLauncher $exitingProcess.Id
   Assert-Equal (Test-Path -LiteralPath $pendingLauncher) $false "pending launcher installation"
 
+  $originalPluginRoot = $script:PluginRoot
+  $script:PluginRoot = Join-Path $temp "lazy-plugin"
+  New-Item -ItemType Directory -Path (Join-Path $script:PluginRoot "web") -Force | Out-Null
+  $script:lazyApplicationBuilds = 0
+  $script:lazyLauncherWrites = 0
+  function Resolve-Bun { "C:\fake\bun.exe" }
+  function Invoke-CollieApplicationBuild([string]$Bun) { $script:lazyApplicationBuilds++ }
+  function Write-CollieActionLauncher([string]$OutputPath) { $script:lazyLauncherWrites++ }
+  Ensure-CollieBuild | Out-Null
+  Assert-Equal $script:lazyApplicationBuilds 1 "lazy start builds the application"
+  Assert-Equal $script:lazyLauncherWrites 0 "lazy start preserves the running launcher"
+  $script:PluginRoot = $originalPluginRoot
+
   "crashed stdout" | Set-Content -LiteralPath $script:LogFile
   "crashed stderr" | Set-Content -LiteralPath $script:ErrorLogFile
   Preserve-CollieCrashLogs
