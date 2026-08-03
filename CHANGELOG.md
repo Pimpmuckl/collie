@@ -6,6 +6,13 @@ All notable changes to Collie are recorded here. The format follows
 `version` in `herdr-plugin.toml`, `package.json`, and `web/package.json` (enforced by
 `scripts/check-version.ts`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
 
+## [0.24.2] - 2026-08-03
+
+### Fixed
+
+- Windows refuses opposite-protocol and raw Tailscale listeners even without a root handler, and a temporary Herdr outage no longer disables the supervised bridge (ee04af8, 5cde27a)
+- Windows scheduled tasks retain resolved Herdr paths, failed web swaps restore the live bundle, and stale recycled PID records no longer block bridge startup (feb45c7)
+
 ## [0.24.1] - 2026-08-03
 
 ### Added
@@ -15,11 +22,6 @@ All notable changes to Collie are recorded here. The format follows
 ### Changed
 
 - Fork installs and update notices follow `Pimpmuckl/collie`; CI covers Linux, macOS and Windows on standard public runners, and one Bun version gate replaces the duplicate shell and PowerShell checks (e4fe102)
-
-### Fixed
-
-- Windows refuses opposite-protocol and raw Tailscale listeners even without a root handler, and a temporary Herdr outage no longer disables the supervised bridge (ee04af8, 5cde27a)
-- Windows scheduled tasks retain resolved Herdr paths, failed web swaps restore the live bundle, and stale recycled PID records no longer block bridge startup (feb45c7)
 
 ## [0.24.0] - 2026-08-03
 
