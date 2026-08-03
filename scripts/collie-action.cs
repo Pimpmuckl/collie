@@ -23,10 +23,13 @@ internal static class CollieAction
         var arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " +
             Quote(controlScript) + " " + string.Join(" ", args.Select(Quote));
 
-        using (var child = Process.Start(new ProcessStartInfo(powershell, arguments)
+        var startInfo = new ProcessStartInfo(powershell, arguments)
         {
             UseShellExecute = false,
-        }))
+        };
+        startInfo.EnvironmentVariables["COLLIE_ACTION_PID"] = Process.GetCurrentProcess().Id.ToString();
+
+        using (var child = Process.Start(startInfo))
         {
             child.WaitForExit();
             return child.ExitCode;

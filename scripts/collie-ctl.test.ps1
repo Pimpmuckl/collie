@@ -34,6 +34,11 @@ COLLIE_HOST="127.0.0.1"
   $launcher = Join-Path $script:PluginRoot "build\collie-action.exe"
   $launcherVersion = (& $launcher version | Out-String).Trim()
   Assert-Equal $launcherVersion (Get-CollieVersion) "action launcher execution"
+  $pendingLauncher = Join-Path $script:PluginRoot "build\collie-action.pending.exe"
+  Copy-Item -LiteralPath $launcher -Destination $pendingLauncher
+  $exitingProcess = Start-Process -FilePath $env:ComSpec -ArgumentList "/c exit 0" -PassThru -WindowStyle Hidden
+  Install-CollieActionLauncher $exitingProcess.Id
+  Assert-Equal (Test-Path -LiteralPath $pendingLauncher) $false "pending launcher installation"
 
   "not valid" | Set-Content -LiteralPath (Join-Path $temp "invalid.env") -Encoding Ascii
   try {

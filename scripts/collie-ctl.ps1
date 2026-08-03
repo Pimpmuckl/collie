@@ -120,21 +120,21 @@ function Assert-LastExit([string]$What) {
   if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
 }
 
-function Write-CollieActionLauncher {
+function Write-CollieActionLauncher([string]$OutputPath) {
   $launcherDir = Join-Path $script:PluginRoot "build"
   New-Item -ItemType Directory -Force -Path $launcherDir | Out-Null
-  $launcher = Join-Path $launcherDir "collie-action.exe"
-  if (Test-Path -LiteralPath $launcher) { return }
+  $launcher = if ($OutputPath) { $OutputPath } else { Join-Path $launcherDir "collie-action.exe" }
+  Remove-Item -LiteralPath $launcher -ErrorAction SilentlyContinue
   Add-Type `
     -Path (Join-Path $PSScriptRoot "collie-action.cs") `
     -OutputAssembly $launcher `
     -OutputType ConsoleApplication
 }
 
-function Invoke-CollieBuild {
+function Invoke-CollieBuild([string]$LauncherOutput) {
   $bun = Resolve-Bun
   New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
-  Write-CollieActionLauncher
+  Write-CollieActionLauncher $LauncherOutput
   if ($env:SKIP_VERSION_CHECK -ne "1") {
     & (Join-Path $PSScriptRoot "check-version.ps1")
   }
@@ -510,8 +510,28 @@ function Uninstall-Collie {
   Write-Output "  kept: $($script:EnvFile) and the checkout"
 }
 
+function Get-CollieActionPid {
+  if (-not $env:COLLIE_ACTION_PID) { return 0 }
+  $launcherPid = 0
+  if (-not [int]::TryParse($env:COLLIE_ACTION_PID, [ref]$launcherPid) -or $launcherPid -le 0) {
+    throw "invalid COLLIE_ACTION_PID"
+  }
+  return $launcherPid
+}
+
+function Install-CollieActionLauncher([int]$LauncherPid) {
+  Wait-Process -Id $LauncherPid -ErrorAction SilentlyContinue
+  $launcherDir = Join-Path $script:PluginRoot "build"
+  Move-Item `
+    -LiteralPath (Join-Path $launcherDir "collie-action.pending.exe") `
+    -Destination (Join-Path $launcherDir "collie-action.exe") `
+    -Force
+}
+
 function Apply-CollieUpdate {
-  Invoke-CollieBuild
+  $launcherPid = Get-CollieActionPid
+  $launcherOutput = if ($launcherPid) { Join-Path $script:PluginRoot "build\collie-action.pending.exe" } else { $null }
+  Invoke-CollieBuild $launcherOutput
   Stop-Collie
   Start-Collie
   try {
@@ -520,6 +540,11 @@ function Apply-CollieUpdate {
     Write-Output "herdr registry refreshed (re-linked)"
   } catch {
     Write-Warning "could not refresh the Herdr registry; run: herdr plugin link `"$($script:PluginRoot)`""
+  }
+  if ($launcherPid) {
+    $powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
+    $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" _install-launcher {1}' -f (Join-Path $PSScriptRoot "collie-ctl.ps1"), $launcherPid
+    Start-Process -FilePath $powershell -ArgumentList $arguments -WindowStyle Hidden
   }
   Write-Output "OK update complete"
 }
@@ -573,6 +598,7 @@ switch ($Command) {
   "uninstall" { Uninstall-Collie }
   "update" { Update-Collie }
   "_apply-update" { Apply-CollieUpdate }
+  "_install-launcher" { Install-CollieActionLauncher ([int]$CommandArgs[0]) }
   "serve" { Invoke-CollieServe }
   "unserve" { Remove-ManagedServe }
   "status" { Show-CollieStatus }
