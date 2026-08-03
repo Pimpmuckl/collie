@@ -14,6 +14,7 @@ $savedConfigDir = $env:HERDR_PLUGIN_CONFIG_DIR
 $savedTaskName = $env:COLLIE_TASK_NAME
 $savedPort = $env:COLLIE_PORT
 $savedRunLevel = $env:COLLIE_TASK_RUN_LEVEL
+$savedSocketPath = $env:HERDR_SOCKET_PATH
 
 try {
   New-Item -ItemType Directory -Path $temp | Out-Null
@@ -25,6 +26,7 @@ COLLIE_HOST="127.0.0.1"
   $env:COLLIE_TASK_NAME = "herdr.collie-test"
   Remove-Item Env:COLLIE_PORT -ErrorAction SilentlyContinue
   Remove-Item Env:COLLIE_TASK_RUN_LEVEL -ErrorAction SilentlyContinue
+  $env:HERDR_SOCKET_PATH = "\\.\pipe\collie-test"
 
   . (Join-Path $PSScriptRoot "collie-ctl.ps1")
   Assert-Equal $script:Port 9123 ".env port"
@@ -46,6 +48,24 @@ COLLIE_HOST="127.0.0.1"
   Assert-Contains (Get-Content -LiteralPath $script:PreviousLogFile -Raw) "crashed stdout" "crash stdout preservation"
   Assert-Contains (Get-Content -LiteralPath $script:PreviousErrorLogFile -Raw) "crashed stderr" "crash stderr preservation"
 
+  $swapRoot = Join-Path $temp "web"
+  New-Item -ItemType Directory -Path (Join-Path $swapRoot "dist"), (Join-Path $swapRoot "dist-staging") | Out-Null
+  "live" | Set-Content -LiteralPath (Join-Path $swapRoot "dist\index.html")
+  "staged" | Set-Content -LiteralPath (Join-Path $swapRoot "dist-staging\index.html")
+  function Move-Item {
+    param([string]$LiteralPath, [string]$Destination, [switch]$Force)
+    if ((Split-Path -Leaf $LiteralPath) -eq "dist-staging") { throw "simulated staged move failure" }
+    Microsoft.PowerShell.Management\Move-Item @PSBoundParameters
+  }
+  try {
+    Install-CollieWebDist $swapRoot
+    throw "failed web swap was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "simulated staged move failure" "web swap failure"
+  }
+  Remove-Item Function:\Move-Item
+  Assert-Contains (Get-Content -LiteralPath (Join-Path $swapRoot "dist\index.html") -Raw) "live" "failed web swap preserves live dist"
+
   "not valid" | Set-Content -LiteralPath (Join-Path $temp "invalid.env") -Encoding Ascii
   try {
     Import-CollieEnv (Join-Path $temp "invalid.env")
@@ -55,13 +75,8 @@ COLLIE_HOST="127.0.0.1"
   }
 
   "$PID|0" | Set-Content -LiteralPath $script:PidFile -NoNewline
-  try {
-    Stop-RecordedCollieProcesses
-    throw "an unrelated recorded process was stopped"
-  } catch {
-    Assert-Contains $_.Exception.Message "no longer belongs to Collie" "process ownership guard"
-  }
-  Remove-Item -LiteralPath $script:PidFile
+  Stop-RecordedCollieProcesses
+  Assert-Equal (Test-Path -LiteralPath $script:PidFile) $false "stale launcher PID record is cleared"
 
   $pushArgsFile = Join-Path $temp "push-args.txt"
   $fakeBun = Join-Path $temp "bun.cmd"
@@ -124,6 +139,8 @@ COLLIE_HOST="127.0.0.1"
   Register-CollieTask | Out-Null
   Assert-Equal $script:registered.TaskName "herdr.collie-test" "task ownership"
   Assert-Contains $script:registered.Action.Argument "_exec-bridge" "task action"
+  Assert-Contains $script:registered.Action.Argument $temp "task preserves resolved config dir"
+  Assert-Contains $script:registered.Action.Argument "\\.\pipe\collie-test" "task preserves resolved socket path"
   Assert-Equal $script:registered.Trigger.User ([Security.Principal.WindowsIdentity]::GetCurrent().Name) "logon trigger user"
   Assert-Equal $script:registered.Principal.RunLevel "Limited" "task privilege"
   Assert-Equal $script:registered.Settings.ExecutionTimeLimit ([TimeSpan]::Zero) "task execution limit"
@@ -227,4 +244,5 @@ COLLIE_HOST="127.0.0.1"
   [Environment]::SetEnvironmentVariable("COLLIE_TASK_NAME", $savedTaskName, "Process")
   [Environment]::SetEnvironmentVariable("COLLIE_PORT", $savedPort, "Process")
   [Environment]::SetEnvironmentVariable("COLLIE_TASK_RUN_LEVEL", $savedRunLevel, "Process")
+  [Environment]::SetEnvironmentVariable("HERDR_SOCKET_PATH", $savedSocketPath, "Process")
 }

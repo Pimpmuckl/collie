@@ -3,7 +3,9 @@ param(
   [Parameter(Position = 0)]
   [string]$Command,
   [Parameter(ValueFromRemainingArguments = $true)]
-  [string[]]$CommandArgs
+  [string[]]$CommandArgs,
+  [string]$TaskConfigDir,
+  [string]$TaskSocketPath
 )
 
 Set-StrictMode -Version Latest
@@ -32,7 +34,7 @@ function Resolve-CollieConfigDir {
   return Join-Path $roaming "herdr\plugins\config\$($script:PluginId)"
 }
 
-$script:ConfigDir = Resolve-CollieConfigDir
+$script:ConfigDir = if ($TaskConfigDir) { $TaskConfigDir } else { Resolve-CollieConfigDir }
 $script:EnvFile = Join-Path $script:ConfigDir ".env"
 $script:LogFile = Join-Path $script:ConfigDir "collie.log"
 $script:ErrorLogFile = Join-Path $script:ConfigDir "collie-error.log"
@@ -79,7 +81,9 @@ $script:Port = Get-ColliePort
 $script:ServeMode = if ($env:COLLIE_SERVE_MODE -eq "http") { "http" } else { "https" }
 $script:SkipServe = $env:COLLIE_SKIP_SERVE -eq "1"
 $script:RoamingDir = if ($env:APPDATA) { $env:APPDATA } else { Join-Path $env:USERPROFILE "AppData\Roaming" }
-$script:SocketPath = if ($env:HERDR_SOCKET_PATH) {
+$script:SocketPath = if ($TaskSocketPath) {
+  $TaskSocketPath
+} elseif ($env:HERDR_SOCKET_PATH) {
   $env:HERDR_SOCKET_PATH
 } else {
   Join-Path $script:RoamingDir "herdr\herdr.sock"
@@ -133,6 +137,30 @@ function Write-CollieActionLauncher([string]$OutputPath) {
     -OutputType ConsoleApplication
 }
 
+function Install-CollieWebDist([string]$WebRoot) {
+  $staging = Join-Path $WebRoot "dist-staging"
+  $dist = Join-Path $WebRoot "dist"
+  $backup = Join-Path $WebRoot "dist-backup"
+
+  if (Test-Path -LiteralPath $backup) {
+    if (Test-Path -LiteralPath $dist) {
+      Remove-Item -LiteralPath $backup -Recurse -Force
+    } else {
+      Move-Item -LiteralPath $backup -Destination $dist
+    }
+  }
+  if (Test-Path -LiteralPath $dist) { Move-Item -LiteralPath $dist -Destination $backup }
+  try {
+    Move-Item -LiteralPath $staging -Destination $dist
+  } catch {
+    if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $dist)) {
+      Move-Item -LiteralPath $backup -Destination $dist
+    }
+    throw
+  }
+  Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 function Invoke-CollieBuild([string]$LauncherOutput) {
   $bun = Resolve-Bun
   New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
@@ -151,7 +179,6 @@ function Invoke-CollieBuild([string]$LauncherOutput) {
 
   $webRoot = Join-Path $script:PluginRoot "web"
   $staging = Join-Path $webRoot "dist-staging"
-  $dist = Join-Path $webRoot "dist"
   if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
   Invoke-InDirectory $webRoot {
     & $bun install
@@ -161,8 +188,7 @@ function Invoke-CollieBuild([string]$LauncherOutput) {
     & $bun run build -- --outDir dist-staging --emptyOutDir
     Assert-LastExit "web build"
   }
-  if (Test-Path -LiteralPath $dist) { Remove-Item -LiteralPath $dist -Recurse -Force }
-  Move-Item -LiteralPath $staging -Destination $dist
+  Install-CollieWebDist $webRoot
 }
 
 function Ensure-CollieBuild {
@@ -175,7 +201,7 @@ function Register-CollieTask {
   $bun = Resolve-Bun
   $powershell = (Get-Command powershell.exe -ErrorAction Stop).Source
   $ctl = Join-Path $PSScriptRoot "collie-ctl.ps1"
-  $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" _exec-bridge' -f $ctl
+  $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}" -TaskConfigDir "{1}" -TaskSocketPath "{2}" _exec-bridge' -f $ctl, $script:ConfigDir, $script:SocketPath
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
   $runLevel = Get-CollieTaskRunLevel
 
@@ -509,10 +535,9 @@ function Stop-RecordedCollieProcesses {
   $launcher = Get-CimInstance Win32_Process -Filter "ProcessId = $launcherId" -ErrorAction SilentlyContinue
   if ($launcher) {
     $controlScript = Join-Path $PSScriptRoot "collie-ctl.ps1"
-    if (-not $launcher.CommandLine.Contains($controlScript) -or -not $launcher.CommandLine.Contains("_exec-bridge")) {
-      throw "recorded launcher PID $launcherId no longer belongs to Collie"
+    if ($launcher.CommandLine -and $launcher.CommandLine.Contains($controlScript) -and $launcher.CommandLine.Contains("_exec-bridge")) {
+      & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $launcherId /T /F | Out-Null
     }
-    & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $launcherId /T /F | Out-Null
   }
 
   $bridge = if ($bridgeId -gt 0) {
@@ -520,10 +545,9 @@ function Stop-RecordedCollieProcesses {
   }
   if ($bridge) {
     $bridgeScript = Join-Path $script:PluginRoot "bridge\index.ts"
-    if (-not $bridge.CommandLine.Contains($bridgeScript)) {
-      throw "recorded bridge PID $bridgeId no longer belongs to Collie"
+    if ($bridge.CommandLine -and $bridge.CommandLine.Contains($bridgeScript)) {
+      Stop-Process -Id $bridgeId -Force
     }
-    Stop-Process -Id $bridgeId -Force
   }
   Remove-Item -LiteralPath $script:PidFile -ErrorAction SilentlyContinue
 }
