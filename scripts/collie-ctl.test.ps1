@@ -40,6 +40,12 @@ COLLIE_HOST="127.0.0.1"
   Install-CollieActionLauncher $exitingProcess.Id
   Assert-Equal (Test-Path -LiteralPath $pendingLauncher) $false "pending launcher installation"
 
+  "crashed stdout" | Set-Content -LiteralPath $script:LogFile
+  "crashed stderr" | Set-Content -LiteralPath $script:ErrorLogFile
+  Preserve-CollieCrashLogs
+  Assert-Contains (Get-Content -LiteralPath $script:PreviousLogFile -Raw) "crashed stdout" "crash stdout preservation"
+  Assert-Contains (Get-Content -LiteralPath $script:PreviousErrorLogFile -Raw) "crashed stderr" "crash stderr preservation"
+
   "not valid" | Set-Content -LiteralPath (Join-Path $temp "invalid.env") -Encoding Ascii
   try {
     Import-CollieEnv (Join-Path $temp "invalid.env")

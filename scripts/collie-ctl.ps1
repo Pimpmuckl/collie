@@ -36,6 +36,8 @@ $script:ConfigDir = Resolve-CollieConfigDir
 $script:EnvFile = Join-Path $script:ConfigDir ".env"
 $script:LogFile = Join-Path $script:ConfigDir "collie.log"
 $script:ErrorLogFile = Join-Path $script:ConfigDir "collie-error.log"
+$script:PreviousLogFile = Join-Path $script:ConfigDir "collie-previous.log"
+$script:PreviousErrorLogFile = Join-Path $script:ConfigDir "collie-error-previous.log"
 $script:PidFile = Join-Path $script:ConfigDir "collie-processes"
 $script:ManagedHandlerFile = Join-Path $script:ConfigDir "tailscale-managed-handler"
 
@@ -557,6 +559,15 @@ function Update-Collie {
   Assert-LastExit "apply update"
 }
 
+function Preserve-CollieCrashLogs {
+  if (Test-Path -LiteralPath $script:LogFile) {
+    Move-Item -LiteralPath $script:LogFile -Destination $script:PreviousLogFile -Force
+  }
+  if (Test-Path -LiteralPath $script:ErrorLogFile) {
+    Move-Item -LiteralPath $script:ErrorLogFile -Destination $script:PreviousErrorLogFile -Force
+  }
+}
+
 function Invoke-CollieBridge {
   $bun = Resolve-Bun
   New-Item -ItemType Directory -Force -Path $script:ConfigDir | Out-Null
@@ -584,6 +595,7 @@ function Invoke-CollieBridge {
     $exitCode = $process.ExitCode
     "$PID|0" | Set-Content -LiteralPath $script:PidFile -NoNewline
     if ($exitCode -eq 0) { exit 0 }
+    Preserve-CollieCrashLogs
     Start-Sleep -Seconds 5
   }
 }
@@ -606,6 +618,8 @@ switch ($Command) {
   "version" { Get-CollieVersion }
   "logs" {
     $lines = if ($CommandArgs -and $CommandArgs.Count -gt 0) { [int]$CommandArgs[0] } else { 50 }
+    if (Test-Path -LiteralPath $script:PreviousLogFile) { Write-Output "previous bridge crash (stdout):"; Get-Content -LiteralPath $script:PreviousLogFile -Tail $lines -Encoding UTF8 }
+    if (Test-Path -LiteralPath $script:PreviousErrorLogFile) { Write-Output "previous bridge crash (stderr):"; Get-Content -LiteralPath $script:PreviousErrorLogFile -Tail $lines -Encoding UTF8 }
     if (Test-Path -LiteralPath $script:LogFile) { Get-Content -LiteralPath $script:LogFile -Tail $lines -Encoding UTF8 } else { "(no log)" }
     if (Test-Path -LiteralPath $script:ErrorLogFile) { Get-Content -LiteralPath $script:ErrorLogFile -Tail $lines -Encoding UTF8 }
   }
