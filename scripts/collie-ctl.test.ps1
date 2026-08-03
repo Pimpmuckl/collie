@@ -197,6 +197,17 @@ COLLIE_HOST="127.0.0.1"
     Assert-Contains $_.Exception.Message "opposite listener protocol" "Tailscale listener protocol guard"
   }
 
+  function Get-TailscaleStatus {
+    param([switch]$Serve)
+    return '{"TCP":{"443":{"TCPForward":"127.0.0.1:9999"}}}' | ConvertFrom-Json
+  }
+  try {
+    Invoke-CollieServe
+    throw "a raw TCP listener was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "opposite listener protocol" "raw Tailscale listener guard"
+  }
+
   $env:COLLIE_TASK_RUN_LEVEL = "limited"
   $script:disabled = @()
   function Ensure-CollieBuild {}

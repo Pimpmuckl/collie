@@ -254,6 +254,7 @@ function Get-ObjectProperty($Object, [string]$Name) {
 
 function Get-ServeProtocol($Config, [int]$ListenerPort) {
   $listener = Get-ObjectProperty (Get-ObjectProperty $Config "TCP") ([string]$ListenerPort)
+  if ($null -eq $listener) { return "absent" }
   if ((Get-ObjectProperty $listener "HTTP") -eq $true) { return "http" }
   if ((Get-ObjectProperty $listener "HTTPS") -eq $true) { return "https" }
   return "other"
@@ -261,7 +262,7 @@ function Get-ServeProtocol($Config, [int]$ListenerPort) {
 
 function Get-ServeProtocols($Config, [int]$ListenerPort) {
   $protocol = Get-ServeProtocol $Config $ListenerPort
-  if ($protocol -ne "other") { Write-Output $protocol }
+  if ($protocol -ne "absent") { Write-Output $protocol }
   $foregroundConfigs = Get-ObjectProperty $Config "Foreground"
   if ($foregroundConfigs) {
     foreach ($property in $foregroundConfigs.PSObject.Properties) {
