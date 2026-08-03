@@ -76,6 +76,7 @@ COLLIE_HOST="127.0.0.1"
   $script:registered = $null
   $script:enabled = @()
   $script:disabled = @()
+  $script:started = @()
   $script:stopped = @()
   function Test-Administrator { $false }
   function New-ScheduledTaskAction($Execute, $Argument, $WorkingDirectory) {
@@ -116,6 +117,7 @@ COLLIE_HOST="127.0.0.1"
   function Enable-ScheduledTask($TaskName) { $script:enabled += $TaskName }
   function Get-ScheduledTask($TaskName) { [pscustomobject]@{ TaskName = $TaskName; State = "Ready" } }
   function Disable-ScheduledTask($TaskName) { $script:disabled += $TaskName }
+  function Start-ScheduledTask($TaskName) { $script:started += $TaskName }
   function Stop-ScheduledTask($TaskName) { $script:stopped += $TaskName }
   function Unregister-ScheduledTask($TaskName, [switch]$Confirm) { $script:unregistered += $TaskName }
 
@@ -183,6 +185,29 @@ COLLIE_HOST="127.0.0.1"
   } catch {
     Assert-Contains $_.Exception.Message "unowned root" "Tailscale ownership guard"
   }
+
+  function Get-TailscaleStatus {
+    param([switch]$Serve)
+    return '{"TCP":{"443":{"HTTP":true}},"Web":{"host.example.ts.net:443":{"Handlers":{"/other":{"Text":"occupied"}}}}}' | ConvertFrom-Json
+  }
+  try {
+    Invoke-CollieServe
+    throw "an opposite-protocol listener without a root handler was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "opposite listener protocol" "Tailscale listener protocol guard"
+  }
+
+  $env:COLLIE_TASK_RUN_LEVEL = "limited"
+  $script:disabled = @()
+  function Ensure-CollieBuild {}
+  function Test-HerdrReady([int]$Attempts = 1) { $false }
+  function Test-BridgeReady([int]$Attempts = 25) { $true }
+  function Invoke-CollieServe {}
+  function Show-CollieStatus {}
+  $startOutput = Start-Collie 3>&1 | Out-String
+  Assert-Contains $startOutput "temporarily unavailable" "temporary Herdr outage warning"
+  Assert-Equal ($script:started -join ",") "herdr.collie-test" "start launches Collie's task"
+  Assert-Equal ($script:disabled -join ",") "" "temporary Herdr outage keeps Collie's task enabled"
 
   Write-Output "OK Windows lifecycle tests"
 } finally {

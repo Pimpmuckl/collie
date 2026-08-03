@@ -252,10 +252,27 @@ function Get-ObjectProperty($Object, [string]$Name) {
   return $null
 }
 
+function Get-ServeProtocol($Config, [int]$ListenerPort) {
+  $listener = Get-ObjectProperty (Get-ObjectProperty $Config "TCP") ([string]$ListenerPort)
+  if ((Get-ObjectProperty $listener "HTTP") -eq $true) { return "http" }
+  if ((Get-ObjectProperty $listener "HTTPS") -eq $true) { return "https" }
+  return "other"
+}
+
+function Get-ServeProtocols($Config, [int]$ListenerPort) {
+  $protocol = Get-ServeProtocol $Config $ListenerPort
+  if ($protocol -ne "other") { Write-Output $protocol }
+  $foregroundConfigs = Get-ObjectProperty $Config "Foreground"
+  if ($foregroundConfigs) {
+    foreach ($property in $foregroundConfigs.PSObject.Properties) {
+      Get-ServeProtocols $property.Value $ListenerPort
+    }
+  }
+}
+
 function Get-ServeEntries($Config, [int]$ListenerPort, [bool]$Foreground = $false) {
   $entries = @()
-  $listener = Get-ObjectProperty (Get-ObjectProperty $Config "TCP") ([string]$ListenerPort)
-  $protocol = if ((Get-ObjectProperty $listener "HTTP") -eq $true) { "http" } elseif ((Get-ObjectProperty $listener "HTTPS") -eq $true) { "https" } else { "other" }
+  $protocol = Get-ServeProtocol $Config $ListenerPort
   $web = Get-ObjectProperty $Config "Web"
   if ($web) {
     foreach ($serverProperty in $web.PSObject.Properties) {
@@ -382,12 +399,12 @@ function Invoke-CollieServe {
 
   Remove-ManagedServe
   $config = Get-TailscaleStatus -Serve
+  if (@(Get-ServeProtocols $config $listenerPort | Where-Object { $_ -ne $script:ServeMode }).Count -gt 0) {
+    throw "Tailscale Serve :$listenerPort already uses the opposite listener protocol"
+  }
   $entries = @(Get-ServeEntries $config $listenerPort)
   if ($entries | Where-Object { $_.Foreground }) {
     throw "Tailscale Serve already has a foreground root on :$listenerPort; refusing to overwrite it"
-  }
-  if ($entries | Where-Object { $_.Protocol -ne $script:ServeMode }) {
-    throw "Tailscale Serve :$listenerPort already uses the opposite listener protocol"
   }
   if ($entries.Count -gt 0 -and ($entries | Where-Object { $_.Proxy -ne $expectedProxy })) {
     throw "Tailscale Serve already has an unowned root on :$listenerPort; refusing to overwrite it"
@@ -470,8 +487,7 @@ function Start-Collie {
   [void](Test-BridgeReady)
   $herdrReady = Test-HerdrReady 30
   if (-not $herdrReady -and (Test-Administrator) -and (Get-CollieTaskRunLevel) -eq "Limited") {
-    Stop-Collie | Out-Null
-    throw "Herdr is elevated, but Collie's task is limited and cannot reach its named pipe. Restart Herdr without Administrator rights, or set COLLIE_TASK_RUN_LEVEL=highest in Collie's .env to give phone actions the same elevated access."
+    Write-Warning "Collie cannot reach Herdr yet. Herdr may be temporarily unavailable or elevated above Collie's limited task. Prefer restarting Herdr normally; use COLLIE_TASK_RUN_LEVEL=highest only when Administrator access is intentional. The bridge remains supervised and will reconnect."
   }
   try {
     Invoke-CollieServe

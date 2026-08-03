@@ -829,9 +829,10 @@ as Linux and macOS.
 The normal Herdr actions work on Windows. `start` creates and starts a Task Scheduler task named
 `herdr.collie`; it runs as the current user at logon and supervises the Bun bridge independently of
 Herdr. The task is limited by default. If Herdr itself is elevated, Windows blocks that task from
-the high-integrity named pipe and `start` refuses with two choices: restart Herdr normally, or set
-`COLLIE_TASK_RUN_LEVEL=highest` in Collie's `.env`. The opt-in gives phone actions the same elevated
-power as that Herdr session. The direct control-script form is:
+the high-integrity named pipe; `start` leaves the supervised bridge running and warns that Herdr may
+be unavailable or elevated. Prefer restarting Herdr normally, or set `COLLIE_TASK_RUN_LEVEL=highest`
+in Collie's `.env`. The opt-in gives phone actions the same elevated power as that Herdr session.
+The direct control-script form is:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 status
