@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, realpath, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { isPiSessionId, parsePiTranscript, PiTranscriptSource } from "./pi.ts";
 
@@ -154,17 +155,17 @@ describe("PiTranscriptSource — path refs are confined to the root", () => {
    *   base/sessions/--repo--/sneaky.jsonl → ../../outside.jsonl   a symlink out of the root
    */
   async function fixture() {
-    const created = `${tmpdir()}/collie-pi-${Math.floor(performance.now() * 1000)}`;
+    const created = join(tmpdir(), `collie-pi-${Math.floor(performance.now() * 1000)}`);
     await mkdir(created, { recursive: true });
     const base = await realpath(created);
-    const root = `${base}/sessions`;
-    const project = `${root}/--var-home-you-repo--`;
+    const root = join(base, "sessions");
+    const project = join(root, "--var-home-you-repo--");
     await mkdir(project, { recursive: true });
-    const log = `${project}/2026-07-29T10-00-00-000Z_${SID}.jsonl`;
+    const log = join(project, `2026-07-29T10-00-00-000Z_${SID}.jsonl`);
     await Bun.write(log, speech("a", "user", "hi"));
-    const outside = `${base}/outside.jsonl`;
+    const outside = join(base, "outside.jsonl");
     await Bun.write(outside, speech("z", "user", "secrets"));
-    const sneaky = `${project}/2026-07-29T11-00-00-000Z_${OUTSIDE_SID}.jsonl`;
+    const sneaky = join(project, `2026-07-29T11-00-00-000Z_${OUTSIDE_SID}.jsonl`);
     await symlink(outside, sneaky);
     return { base, root, log, sneaky };
   }
@@ -179,7 +180,7 @@ describe("PiTranscriptSource — path refs are confined to the root", () => {
 
   test("refuses a path ref pointing outside the root", async () => {
     const { base, root, log } = await fixture();
-    const escape = `${log}/../../../../etc/hosts`;
+    const escape = join(log, "..", "..", "..", "..", "etc", "hosts");
     expect(await new PiTranscriptSource(root).resolve({ kind: "path", value: escape })).toBeNull();
     await rm(base, { recursive: true, force: true });
   });

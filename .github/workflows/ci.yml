@@ -13,21 +13,32 @@ concurrency:
 jobs:
   check:
     name: typecheck + tests
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
 
       # The MANDATORY invariant: the three version files + the newest CHANGELOG heading must agree.
       - name: Version consistency
+        if: runner.os != 'Windows'
         run: bash scripts/check-version.sh
+      - name: Version consistency (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: scripts/check-version.ps1
 
       - name: Install (root)
         run: bun install --frozen-lockfile
       - name: Typecheck (root)
         run: bun run typecheck
       - name: Test (bridge)
-        run: bun run test
+        run: bun test ./bridge
+      - name: Test launcher lifecycle
+        run: bun run test:ctl
 
       - name: Install (web)
         run: cd web && bun install --frozen-lockfile

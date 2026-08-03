@@ -132,10 +132,20 @@ xml_escape() {
   printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
 }
 
+write_action_launcher() {
+  # Herdr actions have one cross-platform command. Generate the platform-native launcher during
+  # install instead of making every action depend on Bun being visible in Herdr's minimal PATH.
+  mkdir -p "${PLUGIN_ROOT}/build"
+  printf '%s\n' '#!/bin/sh' 'exec bash "$(dirname "$0")/../scripts/collie-ctl.sh" "$@"' \
+    > "${PLUGIN_ROOT}/build/collie-action.exe"
+  chmod +x "${PLUGIN_ROOT}/build/collie-action.exe"
+}
+
 # Build the Vite/React PWA into web/dist. The bridge serves that directory; without it the API
 # still runs but the UI 503s. Safe to call repeatedly (no-op if already built, unless forced).
 cmd_build() {
   [ -n "$BUN" ] || { echo "error: bun not found on PATH" >&2; exit 1; }
+  write_action_launcher
   # Version gate: refuse to build a release whose version files / CHANGELOG disagree.
   # Override (e.g. mid-refactor) with SKIP_VERSION_CHECK=1.
   if [ "${SKIP_VERSION_CHECK:-}" != "1" ]; then

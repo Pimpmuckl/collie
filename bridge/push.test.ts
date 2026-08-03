@@ -12,6 +12,7 @@ import { loadConfig } from "./config.ts";
 // and round-trip the subscriptions file through a throwaway temp state dir.
 
 const dirs: string[] = [];
+const posixTest = process.platform === "win32" ? test.skip : test;
 async function tempCfg() {
   const stateDir = await mkdtemp(join(tmpdir(), "collie-push-"));
   dirs.push(stateDir);
@@ -98,7 +99,7 @@ describe("Push — broadcast delivery & pruning", () => {
 });
 
 describe("Push — persistence", () => {
-  test("addSubscription persists with owner-only (0600) permissions", async () => {
+  posixTest("addSubscription persists with owner-only (0600) permissions", async () => {
     const cfg = await tempCfg();
     const push = new Push(cfg, () => Promise.resolve());
     enable(push, []);

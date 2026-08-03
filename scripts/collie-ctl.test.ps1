@@ -1,0 +1,154 @@
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+function Assert-Equal($Actual, $Expected, [string]$Message) {
+  if ($Actual -ne $Expected) { throw "$Message - expected '$Expected', got '$Actual'" }
+}
+
+function Assert-Contains([string]$Actual, [string]$Expected, [string]$Message) {
+  if (-not $Actual.Contains($Expected)) { throw "$Message - '$Expected' not found in '$Actual'" }
+}
+
+$temp = Join-Path ([IO.Path]::GetTempPath()) "collie-ctl-$([guid]::NewGuid().ToString('N'))"
+$savedConfigDir = $env:HERDR_PLUGIN_CONFIG_DIR
+$savedTaskName = $env:COLLIE_TASK_NAME
+$savedPort = $env:COLLIE_PORT
+$savedRunLevel = $env:COLLIE_TASK_RUN_LEVEL
+
+try {
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  @'
+COLLIE_PORT=9123
+COLLIE_HOST="127.0.0.1"
+'@ | Set-Content -LiteralPath (Join-Path $temp ".env") -Encoding Ascii
+  $env:HERDR_PLUGIN_CONFIG_DIR = $temp
+  $env:COLLIE_TASK_NAME = "herdr.collie-test"
+  Remove-Item Env:COLLIE_PORT -ErrorAction SilentlyContinue
+  Remove-Item Env:COLLIE_TASK_RUN_LEVEL -ErrorAction SilentlyContinue
+
+  . (Join-Path $PSScriptRoot "collie-ctl.ps1")
+  Assert-Equal $script:Port 9123 ".env port"
+  Assert-Equal $env:COLLIE_HOST "127.0.0.1" ".env quoted value"
+
+  Write-CollieActionLauncher
+  $launcher = Join-Path $script:PluginRoot "build\collie-action.exe"
+  $launcherVersion = (& $launcher version | Out-String).Trim()
+  Assert-Contains $launcherVersion "0.23.0" "action launcher execution"
+
+  "not valid" | Set-Content -LiteralPath (Join-Path $temp "invalid.env") -Encoding Ascii
+  try {
+    Import-CollieEnv (Join-Path $temp "invalid.env")
+    throw "invalid .env line was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "invalid .env line" ".env validation"
+  }
+
+  "$PID|0" | Set-Content -LiteralPath $script:PidFile -NoNewline
+  try {
+    Stop-RecordedCollieProcesses
+    throw "an unrelated recorded process was stopped"
+  } catch {
+    Assert-Contains $_.Exception.Message "no longer belongs to Collie" "process ownership guard"
+  }
+  Remove-Item -LiteralPath $script:PidFile
+
+  $script:registered = $null
+  $script:enabled = @()
+  $script:disabled = @()
+  $script:stopped = @()
+  function Resolve-Bun { "C:\fake\bun.exe" }
+  function Test-Administrator { $false }
+  function New-ScheduledTaskAction($Execute, $Argument, $WorkingDirectory) {
+    [pscustomobject]@{ Execute = $Execute; Argument = $Argument; WorkingDirectory = $WorkingDirectory }
+  }
+  function New-ScheduledTaskTrigger([switch]$AtLogOn, $User) {
+    [pscustomobject]@{ AtLogOn = $AtLogOn; User = $User }
+  }
+  function New-ScheduledTaskPrincipal($UserId, $LogonType, $RunLevel) {
+    [pscustomobject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
+  }
+  function New-ScheduledTaskSettingsSet {
+    param(
+      [switch]$AllowStartIfOnBatteries,
+      [switch]$DontStopIfGoingOnBatteries,
+      $ExecutionTimeLimit,
+      $MultipleInstances,
+      $RestartCount,
+      $RestartInterval,
+      [switch]$StartWhenAvailable
+    )
+    [pscustomobject]@{
+      ExecutionTimeLimit = $ExecutionTimeLimit
+      RestartCount = $RestartCount
+      RestartInterval = $RestartInterval
+    }
+  }
+  function Register-ScheduledTask {
+    param($TaskName, $Action, $Trigger, $Principal, $Settings, $Description, [switch]$Force)
+    $script:registered = [pscustomobject]@{
+      TaskName = $TaskName
+      Action = $Action
+      Trigger = $Trigger
+      Principal = $Principal
+      Settings = $Settings
+    }
+  }
+  function Enable-ScheduledTask($TaskName) { $script:enabled += $TaskName }
+  function Get-ScheduledTask($TaskName) { [pscustomobject]@{ TaskName = $TaskName; State = "Ready" } }
+  function Disable-ScheduledTask($TaskName) { $script:disabled += $TaskName }
+  function Stop-ScheduledTask($TaskName) { $script:stopped += $TaskName }
+
+  Register-CollieTask | Out-Null
+  Assert-Equal $script:registered.TaskName "herdr.collie-test" "task ownership"
+  Assert-Contains $script:registered.Action.Argument "_exec-bridge" "task action"
+  Assert-Equal $script:registered.Trigger.User ([Security.Principal.WindowsIdentity]::GetCurrent().Name) "logon trigger user"
+  Assert-Equal $script:registered.Principal.RunLevel "Limited" "task privilege"
+  Assert-Equal $script:registered.Settings.ExecutionTimeLimit ([TimeSpan]::Zero) "task execution limit"
+  Assert-Equal $script:registered.Settings.RestartCount 999 "task restart policy"
+
+  $env:COLLIE_TASK_RUN_LEVEL = "highest"
+  function Test-Administrator { $false }
+  try {
+    Get-CollieTaskRunLevel | Out-Null
+    throw "a non-admin highest task was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "requires an Administrator" "highest task privilege guard"
+  }
+  function Test-Administrator { $true }
+  Register-CollieTask | Out-Null
+  Assert-Equal $script:registered.Principal.RunLevel "Highest" "elevated Herdr task privilege"
+
+  Stop-Collie | Out-Null
+  Assert-Equal ($script:disabled -join ",") "herdr.collie-test" "stop disables only Collie's task"
+  Assert-Equal ($script:stopped -join ",") "herdr.collie-test" "stop stops only Collie's task"
+
+  function Resolve-Tailscale { "C:\fake\tailscale.exe" }
+  function Get-TailscaleDnsName { "host.example.ts.net" }
+  function Remove-ManagedServe {}
+  function Get-TailscaleStatus {
+    param([switch]$Serve)
+    return '{"TCP":{"443":{"HTTPS":true}},"Web":{"host.example.ts.net:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9123"}}}}}' | ConvertFrom-Json
+  }
+  'https:443|host.example.ts.net:443|http://127.0.0.1:9123' | Set-Content -LiteralPath $script:ManagedHandlerFile -NoNewline
+  $serveOutput = Invoke-CollieServe | Out-String
+  Assert-Contains $serveOutput "already configured" "existing Tailscale mapping"
+
+  function Get-TailscaleStatus {
+    param([switch]$Serve)
+    return '{"TCP":{"443":{"HTTPS":true}},"Web":{"host.example.ts.net:443":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:9999"}}}}}' | ConvertFrom-Json
+  }
+  try {
+    Invoke-CollieServe
+    throw "unowned Tailscale root was accepted"
+  } catch {
+    Assert-Contains $_.Exception.Message "unowned root" "Tailscale ownership guard"
+  }
+
+  Write-Output "OK Windows lifecycle tests"
+} finally {
+  if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+  [Environment]::SetEnvironmentVariable("HERDR_PLUGIN_CONFIG_DIR", $savedConfigDir, "Process")
+  [Environment]::SetEnvironmentVariable("COLLIE_TASK_NAME", $savedTaskName, "Process")
+  [Environment]::SetEnvironmentVariable("COLLIE_PORT", $savedPort, "Process")
+  [Environment]::SetEnvironmentVariable("COLLIE_TASK_RUN_LEVEL", $savedRunLevel, "Process")
+}

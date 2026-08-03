@@ -23,7 +23,7 @@ voice, no SSH.
 
 A Herdr web bridge — a long-lived local process that
 
-- connects to Herdr's Unix-socket API (`$HERDR_SOCKET_PATH`),
+- connects to Herdr's local control endpoint (`$HERDR_SOCKET_PATH`),
 - serves a **mobile-first web app**, with live state polled over HTTP (see §5),
 - translates browser actions → socket methods,
 - sits behind **one hardened front door** — `tailscale serve` (default; tailnet-only HTTPS +
@@ -44,24 +44,26 @@ The browser never touches the socket directly; the bridge is the only thing that
      • static web app + small JSON API (browser polls /api/snapshot)
      • herdr-client adapter (the ONLY code that knows socket method names)
      • snapshot poll, event-poked (see §5)
-        │  newline-delimited JSON over Unix socket
+        │  newline-delimited JSON over Unix socket / Windows named pipe
         ▼
    Herdr server (owns panes, agents, state)
 ```
 
-## 3. Deployment model — **systemd user service, not a plugin pane**
+## 3. Deployment model — **native user supervisor, not a plugin pane**
 
 This is the clearest call in the design. A plugin **pane** runs inside a terminal pane: if the pane
 closes, the user detaches, or Herdr restarts, the bridge dies — exactly when you're on mobile and not
 watching the TUI. A long-lived network daemon must be supervised independently.
 
-- **The bridge runs as a `systemd --user` service** (launchd agent on macOS) — starts at login,
-  restarts on failure, survives Herdr restarts.
+- **The bridge runs under the native user supervisor** — `systemd --user` on Linux, launchd on
+  macOS, and Task Scheduler on Windows. It starts at login, restarts on failure, and survives Herdr
+  restarts.
 - **The Herdr plugin stays — as a thin registration/launcher,** so the bridge shows up in
   `herdr plugin list` and Herdr conventions still apply. Its `[[actions]]` do things like
   `systemctl --user start collie` and **print the tailnet URL**; they do *not* host the server. A
-  `[[build]]` step builds the web UI on `herdr plugin install` (GitHub); local `link` installs skip
-  it and build lazily on first `start`. Concretely that's `[[actions]]` + `[[build]]` and nothing
+  `[[build]]` step builds the web UI and platform action launcher on `herdr plugin install`
+  (GitHub); local `link` installs run that build explicitly once before linking. Concretely that's
+  `[[actions]]` + `[[build]]` and nothing
   else: `[[panes]]` is what this section argues against, and `[[events]]` would duplicate the
   bridge's own `events.subscribe` stream (§5).
 - **Socket-path discovery:** a non-Herdr-launched daemon won't get `$HERDR_SOCKET_PATH` injected, so
