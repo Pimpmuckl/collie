@@ -401,7 +401,7 @@ function Invoke-CollieServe {
   "$($script:ServeMode):$listenerPort|$hostPort|$expectedProxy" | Set-Content -LiteralPath $script:ManagedHandlerFile -NoNewline
   if ($entries.Count -eq 0) {
     $listenerArg = if ($script:ServeMode -eq "http") { "--http=$listenerPort" } else { "--https=443" }
-    & $tailscale serve --bg $listenerArg --set-path=/ $script:Port
+    & $tailscale serve --yes --bg $listenerArg --set-path=/ $script:Port
     if ($LASTEXITCODE -ne 0) {
       Remove-Item -LiteralPath $script:ManagedHandlerFile -ErrorAction SilentlyContinue
       throw "tailscale serve failed with exit code $LASTEXITCODE"

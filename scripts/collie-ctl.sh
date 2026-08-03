@@ -763,7 +763,7 @@ cmd_serve() {
   if [ "$SERVE_MODE" = "http" ]; then
     ensure_tailscale_root_available "$PORT" http "$expected_proxy" || return 1
     printf '%s|%s|%s\n' "http:${PORT}" "${tailscale_host}:${PORT}" "$expected_proxy" > "$TAILSCALE_HANDLER_FILE"
-    if tailscale serve --bg --http="$PORT" --set-path=/ "$PORT" >"$out" 2>&1; then
+    if tailscale serve --yes --bg --http="$PORT" --set-path=/ "$PORT" >"$out" 2>&1; then
       echo "tailscale serve (http) → tailnet :${PORT} -> 127.0.0.1:${PORT}"
     else
       rm -f "$TAILSCALE_HANDLER_FILE"
@@ -774,7 +774,7 @@ cmd_serve() {
   else
     ensure_tailscale_root_available 443 https "$expected_proxy" || return 1
     printf '%s|%s|%s\n' "https:443" "${tailscale_host}:443" "$expected_proxy" > "$TAILSCALE_HANDLER_FILE"
-    if tailscale serve --bg --set-path=/ "$PORT" >"$out" 2>&1; then
+    if tailscale serve --yes --bg --set-path=/ "$PORT" >"$out" 2>&1; then
       echo "tailscale serve (https) → tailnet :443 -> 127.0.0.1:${PORT}"
     else
       rm -f "$TAILSCALE_HANDLER_FILE"

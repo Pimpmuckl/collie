@@ -74,7 +74,7 @@ if [ "\${1:-}" = serve ] && [ "\${2:-}" = status ] && [ "\${3:-}" = --json ]; th
   cat "$TS_STATUS"
   exit 0
 fi
-if [ "\${1:-}" = serve ] && [[ " \$* " == *" --bg "* ]]; then
+if [ "\${1:-}" = serve ] && [[ " \$* " == *" --yes "* ]] && [[ " \$* " == *" --bg "* ]]; then
   target="\${!#}"
   listener=443
   protocol=HTTPS
