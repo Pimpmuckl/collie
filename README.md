@@ -11,8 +11,8 @@ Each agent gets a colored terminal mirror, a slash-command palette, a special-ke
 conversation history you can scroll and search. The reply box is an ordinary text field, so your
 phone's own voice dictation works in it; Collie ships none of its own.
 
-A Herdr plugin (thin launcher) plus a Bun/TypeScript bridge running as a `systemd --user` service,
-serving a Vite + React + shadcn PWA.
+A Herdr plugin (thin launcher) plus a supervised Bun/TypeScript bridge serving a Vite + React +
+shadcn PWA.
 
 ## Contents
 
@@ -27,7 +27,7 @@ serving a Vite + React + shadcn PWA.
 - [Update](#update-to-a-new-release)
 - [Uninstall](#stop-or-uninstall)
 - [Deployment variants](#deployment-variants)
-- [Windows (experimental)](#windows-experimental)
+- [Windows](#windows)
 - [Web Push](#web-push-optional)
 - [Troubleshooting](#troubleshooting)
 - [Architecture](#architecture)
@@ -127,6 +127,10 @@ Narrow the blast radius with Tailscale ACLs and `COLLIE_TRUSTED_USER`. Provided 
 
 ## Requirements
 
+> This fork adds native Windows support to [`AltanS/collie`](https://github.com/AltanS/collie).
+> Install from `Pimpmuckl/collie` to get the Windows launcher and lifecycle controller described
+> below.
+
 On the **host** (the tailnet node your agents run on):
 
 | Tool | Why |
@@ -136,16 +140,16 @@ On the **host** (the tailnet node your agents run on):
 | [**Tailscale**](https://tailscale.com) | Front door for the default variant (`tailscale serve`); optional if you run [Variant C](#variant-c--reverse-proxy-as-the-only-front-door-no-tailscale) behind your own reverse proxy. Without any front door, the bridge is `127.0.0.1`-only. |
 | **git** | Clone, and the `update` command. |
 
-Soft dependencies: **Node.js** (the control script uses it to extract your MagicDNS name from
+Soft dependencies: **Node.js** (the Unix control script uses it to extract your MagicDNS name from
 `tailscale status --json`; without it the banner falls back to the loopback URL) and a **service
-supervisor** — `systemd --user` on Linux, **launchd** on macOS (both ship with the OS); a host with
-neither falls back to an unsupervised `nohup` process. You never install JS
+supervisor** — `systemd --user` on Linux, **launchd** on macOS, and **Task Scheduler** on Windows; a
+Unix host with neither falls back to an unsupervised `nohup` process. You never install JS
 deps by hand — the build runs `bun install` for you; the backend imports only Bun + `node:*`.
 [`web-push`](https://www.npmjs.com/package/web-push) is optional and lazy (see [Web
 Push](#web-push-optional)).
 
-**Linux and macOS are the supported hosts.** The bridge itself also runs on **Windows**
-(experimental) against Herdr's Windows beta — see [Windows](#windows-experimental).
+**Linux, macOS, and Windows are supported hosts.** Windows uses Herdr's Windows beta and has a few
+platform-specific first-run notes in [Windows](#windows).
 
 ## Install
 
@@ -154,30 +158,39 @@ On the host, not your phone. Two ways in.
 **From GitHub (turnkey)** — Herdr clones and builds for you:
 
 ```bash
-herdr plugin install AltanS/collie
+herdr plugin install Pimpmuckl/collie
 herdr plugin action invoke start --plugin herdr.collie
 ```
 
-**From a local clone (for development)** — registered by path:
+**From a local clone (for development)** — build once, then register by path:
 
 ```bash
-git clone https://github.com/AltanS/collie.git && cd collie
+git clone https://github.com/Pimpmuckl/collie.git && cd collie
+bash scripts/collie-ctl.sh build
 herdr plugin link "$(pwd)"
 herdr plugin action invoke start --plugin herdr.collie
 ```
 
-They differ only in *when* the UI builds: a GitHub install builds at install time (the manifest's
-`[[build]]` step); a linked clone builds on first `start`. Either way, `start` does four things:
+On Windows, replace the build and link lines with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 build
+herdr plugin link (Get-Location).Path
+```
+
+A GitHub install builds at install time through the manifest's `[[build]]` step. A linked clone must
+run the platform control script's `build` command once before Herdr can invoke its generated action
+launcher. After that, `start` does four things:
 
 1. **builds** `web/dist` if it's missing (typechecked, staged, swapped in atomically),
-2. **starts the bridge** as the `systemd --user` service `collie` (`nohup` fallback without systemd),
+2. **starts the bridge** under the native user supervisor (`nohup` fallback on Unix without one),
 3. **publishes it on the tailnet** — literally `tailscale serve --bg 8787`: HTTPS on the host's
    MagicDNS name, `:443 → 127.0.0.1:8787`, tailnet-only,
 4. **prints the banner** with the URL to open — walked through line by line in
    [First run](#first-run--what-youll-see).
 
-> No Herdr? Run `scripts/collie-ctl.sh start` directly — same effect (config then lives in
-> `~/.config/collie/.env`).
+> No Herdr? Run `scripts/collie-ctl.sh start` on Unix or
+> `powershell.exe -File scripts/collie-ctl.ps1 start` on Windows.
 
 ## First run — what you'll see
 
@@ -187,7 +200,7 @@ Herdr's JSON envelope instead** — the same text is the action's *captured stdo
 
 ```console
 $ scripts/collie-ctl.sh start
-building web UI (first run)…                    # linked clone only; a GitHub install already built
+building web UI (first run)…                    # direct script start only; plugin installs prebuild
 …bun install · typecheck · vite build output…
 bridge started (systemd --user: collie)
 tailscale serve (https) → tailnet :443 -> 127.0.0.1:8787
@@ -212,8 +225,9 @@ The `✓` is a real probe — the script connected to the bridge's port and got 
    `~/.config/systemd/user/collie.service`, enabled and started, auto-restarting on failure. Inspect
    it with `systemctl --user status collie`. On macOS a launchd agent labelled `herdr.collie`, written
    to `~/Library/LaunchAgents/herdr.collie.plist` and bootstrapped into `gui/$(id -u)`; inspect it
-   with `launchctl print gui/$(id -u)/herdr.collie`. (Neither supervisor? A `nohup` process with a
-   pidfile in the config dir instead.)
+   with `launchctl print gui/$(id -u)/herdr.collie`. On Windows, a Task Scheduler task named
+   `herdr.collie` runs at logon as the current user and restarts the bridge on failure. (No Unix
+   supervisor? A `nohup` process with a pidfile in the config dir instead.)
 3. **A tailnet-only `tailscale serve` mapping** — the script ran `tailscale serve --bg 8787`:
    HTTPS on the host's MagicDNS name, `:443 → 127.0.0.1:8787`. Tailscale terminates TLS (managed
    cert, nothing to obtain or renew) and injects the identity header the bridge checks. Inspect
@@ -307,7 +321,8 @@ cp .env.example "$(herdr plugin config-dir herdr.collie)/.env"
 The bridge reads `.env` only at startup — after any edit, `scripts/collie-ctl.sh restart`. See
 [`.env.example`](./.env.example) for the full option list — commonly `COLLIE_PORT`, or
 `COLLIE_SERVE_MODE=http` (Headscale / `.internal` domains; read by the control script when it runs
-`tailscale serve`).
+`tailscale serve`). The in-app release feed follows `Pimpmuckl/collie`; override it with
+`COLLIE_UPDATE_REPO` only when this checkout tracks a different repository.
 
 **Custom domain or reverse proxy?** See
 [Variant C](#variant-c--reverse-proxy-as-the-only-front-door-no-tailscale) for the full reverse-proxy
@@ -805,27 +820,40 @@ Three things to get right, none of them Collie-specific:
 > you'd treat a root password — and prefer a tunnel scoped to your own devices over a public URL
 > with a gate on it.
 
-## Windows (experimental)
+## Windows
 
-The **bridge** runs on Windows against Herdr's Windows beta; the **launcher** does not. Herdr there
-exposes its control socket as a *named pipe* named after the full socket path, not an AF_UNIX
-socket, so Collie dials it through `node:net` instead of `Bun.connect` — one shim,
-[`bridge/dial.ts`](./bridge/dial.ts), which explains the mapping at the top of the file.
+Herdr exposes its Windows control socket as a named pipe. Collie maps the normal
+`%APPDATA%\herdr\herdr.sock` path to that pipe and uses the same JSON protocol and live event stream
+as Linux and macOS.
 
-What that means in practice:
+The normal Herdr actions work on Windows. `start` creates and starts a Task Scheduler task named
+`herdr.collie`; it runs as the current user at logon and supervises the Bun bridge independently of
+Herdr. The task is limited by default. If Herdr itself is elevated, Windows blocks that task from
+the high-integrity named pipe; `start` leaves the supervised bridge running and warns that Herdr may
+be unavailable or elevated. Prefer restarting Herdr normally, or set `COLLIE_TASK_RUN_LEVEL=highest`
+in Collie's `.env`. The opt-in gives phone actions the same elevated power as that Herdr session.
+The direct control-script form is:
 
-- **Run the bridge directly** — `bun run bridge/index.ts`. There's no systemd unit, and the Herdr
-  action buttons shell out to `bash`, so they only work if Git Bash is on `PATH`. The manifest
-  therefore still declares `linux`/`macos` only, rather than advertising buttons that may not fire.
-- **`tailscale serve` isn't wired up here.** Use the [Variant C](#variant-c--reverse-proxy-as-the-only-front-door-no-tailscale)
-  posture: loopback bind, your own ingress in front, `COLLIE_PUBLIC_HOSTS` pinned. The security
-  rules in [§Security](#%EF%B8%8F-security--read-before-you-run-it) are not relaxed on Windows.
-- **Set `COLLIE_MULTI_SESSION=off`** — session discovery derives POSIX paths.
-- The socket path defaults to `%APPDATA%\herdr\herdr.sock`; override with `HERDR_SOCKET_PATH`
-  (an explicit `\\.\pipe\…` value is passed through untouched).
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 status
+```
 
-**Is it actually working?** The bridge logs `[events] stream up` on start — the event stream works
-over the pipe, so Windows gets the same live updates as Linux, not degraded polling.
+Replace `status` with `start`, `stop`, `restart`, `update`, `version`, `url`, `logs`, `serve`,
+`unserve`, `build`, or `push-test` for the other direct commands. The normal Herdr actions remain the
+preferred location-independent interface.
+
+Tailscale's Windows CLI requires an Administrator terminal to change Serve mappings. A normal
+`start` still brings up the loopback bridge and prints the exact elevated `serve` command when this
+one-time step is needed. Run that command from Terminal (Admin), then use `status` or `url` normally.
+Collie records the exact root mapping it owns and will not overwrite or remove another service.
+The security rules in [Security](#%EF%B8%8F-security--read-before-you-run-it) are unchanged.
+
+The socket path defaults to `%APPDATA%\herdr\herdr.sock`; override it with `HERDR_SOCKET_PATH`. An
+explicit `\\.\pipe\…` value is passed through unchanged. Multi-session discovery uses native Windows
+paths and remains enabled by default.
+
+**Is it actually working?** The bridge log contains `[events] stream up`, and `status` reports the
+local and tailnet URLs.
 
 `COLLIE_HERDR_DIAL=net` forces that same dialer on Linux/macOS. It exists so the Windows code path
 can be exercised — and regression-tested — without a Windows box; `bridge/dial.test.ts` uses it.
@@ -851,6 +879,12 @@ Collie pushes when an agent goes **blocked** or **done**, with the agent's messa
 
 ```bash
 bash scripts/collie-ctl.sh push-test                 # or: push-test "Title" "Body"
+```
+
+On Windows:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/collie-ctl.ps1 push-test
 ```
 
 ## Troubleshooting
@@ -940,8 +974,8 @@ Full design rationale in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 Clone it and `herdr plugin link` it ([Install](#install) above), then edit in place.
 
 - **The manifest is the plugin.** `herdr-plugin.toml` declares the actions listed in
-  [Herdr actions](#herdr-actions), and each one shells out to `scripts/collie-ctl.sh`. Both are
-  commented — read them, not a paraphrase of them here.
+  [Herdr actions](#herdr-actions), and its generated launcher selects `scripts/collie-ctl.sh` or
+  `scripts/collie-ctl.ps1`. Both are commented — read them, not a paraphrase of them here.
 - **One asymmetry in the dev loop:** `web/` rebuilds go live with no restart (the bridge serves
   `web/dist` from disk); `bridge/` changes need `systemctl --user restart collie`. Build, test and
   versioning rules are in [`CLAUDE.md`](./CLAUDE.md) — versioning is hook-enforced, so skim it before

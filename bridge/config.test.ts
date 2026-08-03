@@ -68,9 +68,9 @@ describe("loadConfig", () => {
     expect(cfg.readLines).toBe(200);
     // Transcript history defaults ON — it's the only scrollback a Claude pane can ever have.
     expect(cfg.transcript).toBe(true);
-    expect(cfg.journalRoots.claude).toEndWith("/.claude/projects");
+    expect(cfg.journalRoots.claude).toEndWith(join(".claude", "projects"));
     // OpenCode keeps ONE sqlite database at the top of its XDG data dir — no per-session files.
-    expect(cfg.journalRoots.opencode).toEndWith("/.local/share/opencode");
+    expect(cfg.journalRoots.opencode).toEndWith(join(".local", "share", "opencode"));
     expect(cfg.submitKeys).toEqual(["Enter"]);
     expect(cfg.trustedUser).toBe("");
     expect(cfg.allowedOrigins).toEqual([]);
@@ -149,9 +149,9 @@ describe("loadConfig", () => {
     process.env.PI_CODING_AGENT_DIR = "/srv/pi";
     process.env.XDG_DATA_HOME = "/srv/share";
     const cfg = loadConfig();
-    expect(cfg.journalRoots.codex).toBe("/srv/codex/sessions");
-    expect(cfg.journalRoots.pi).toBe("/srv/pi/sessions");
-    expect(cfg.journalRoots.opencode).toBe("/srv/share/opencode");
+    expect(cfg.journalRoots.codex).toBe(join(process.env.CODEX_HOME, "sessions"));
+    expect(cfg.journalRoots.pi).toBe(join(process.env.PI_CODING_AGENT_DIR, "sessions"));
+    expect(cfg.journalRoots.opencode).toBe(join(process.env.XDG_DATA_HOME, "opencode"));
   });
 
   test("an explicit COLLIE_* root beats the harness's home var", () => {

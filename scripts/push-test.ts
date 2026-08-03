@@ -46,5 +46,5 @@ if (count === 0) {
 await push.notify(title, body, { paneId });
 console.log(
   `✓ sent "${title}" to ${count} device(s). Check your phone` +
-    " (and `journalctl --user -u collie` for any per-endpoint send errors).",
+    " (and Collie's bridge logs for any per-endpoint send errors).",
 );

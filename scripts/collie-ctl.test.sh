@@ -74,7 +74,7 @@ if [ "\${1:-}" = serve ] && [ "\${2:-}" = status ] && [ "\${3:-}" = --json ]; th
   cat "$TS_STATUS"
   exit 0
 fi
-if [ "\${1:-}" = serve ] && [[ " \$* " == *" --bg "* ]]; then
+if [ "\${1:-}" = serve ] && [[ " \$* " == *" --yes "* ]] && [[ " \$* " == *" --bg "* ]]; then
   target="\${!#}"
   listener=443
   protocol=HTTPS
@@ -648,6 +648,25 @@ EOF
   assert_contains "$(cat "${CASE_DIR}/build.out")" 'bun not found'
 }
 
+test_action_launcher_generation() {
+  setup_case action-launcher
+  local plugin_root="${CASE_DIR}/plugin"
+  mkdir -p "$plugin_root"
+  local harness="${CASE_DIR}/launcher.sh"
+  cat > "$harness" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export HOME="$HOME_DIR"
+export HERDR_PLUGIN_CONFIG_DIR="$CONFIG_DIR"
+source "$CTL"
+PLUGIN_ROOT="$plugin_root"
+write_action_launcher
+EOF
+  bash "$harness"
+  [ -x "${plugin_root}/build/collie-action.exe" ] || fail "Unix action launcher is not executable"
+  assert_contains "$(cat "${plugin_root}/build/collie-action.exe")" 'collie-ctl.sh'
+}
+
 test_tailscale_cutovers_and_collisions
 test_missing_tailscale_cli
 test_state_delete_failures
@@ -659,5 +678,6 @@ test_launchd_bootstrap_retries
 test_bun_resolution
 test_non_absolute_bun_never_reaches_path
 test_missing_bun_still_reports
+test_action_launcher_generation
 
 echo "collie-ctl lifecycle tests: passed"

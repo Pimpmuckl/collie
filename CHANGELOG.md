@@ -4,7 +4,45 @@ All notable changes to Collie are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project uses
 [Semantic Versioning](https://semver.org/). The newest `## [x.y.z]` heading **must** match the
 `version` in `herdr-plugin.toml`, `package.json`, and `web/package.json` (enforced by
-`scripts/check-version.sh`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
+`scripts/check-version.ts`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
+
+## [0.24.3] - 2026-08-03
+
+### Fixed
+
+- A first-run Windows `start` rebuilds only the missing application bundle and never tries to replace its own running launcher (5134556)
+
+## [0.24.2] - 2026-08-03
+
+### Fixed
+
+- Windows refuses opposite-protocol and raw Tailscale listeners even without a root handler, and a temporary Herdr outage no longer disables the supervised bridge (ee04af8, 5cde27a)
+- Windows scheduled tasks retain resolved Herdr paths, failed web swaps restore the live bundle, and stale recycled PID records no longer block bridge startup (feb45c7)
+
+## [0.24.1] - 2026-08-03
+
+### Added
+
+- Windows now exposes the direct `push-test` diagnostic and includes the active Tailscale Serve mapping in `status` output (e4fe102)
+
+### Changed
+
+- Fork installs and update notices follow `Pimpmuckl/collie`; CI covers Linux, macOS and Windows on standard public runners, and one Bun version gate replaces the duplicate shell and PowerShell checks (e4fe102)
+
+## [0.24.0] - 2026-08-03
+
+### Added
+
+- **Windows is a supported host.** The normal Herdr actions now build and invoke a native Windows launcher, supervise the bridge with Task Scheduler, use the Windows named-pipe transport and native paths, and manage only Collie's recorded Tailscale Serve root. The task runs limited by default; an elevated Herdr session requires an explicit `COLLIE_TASK_RUN_LEVEL=highest` opt-in because phone actions inherit that Administrator power (8693667)
+- CI now runs the bridge and launcher lifecycle suites on both Ubuntu and Windows. The Windows suite owns the task definition, process-tree teardown, `.env` parsing, Tailscale collision refusal, and native launcher contract (8693667)
+
+### Fixed
+
+- Stopping or restarting the Windows task now terminates only its recorded PowerShell/Bun process tree, so Task Scheduler cannot strand an old bridge on port 8787. A stale or reused PID is refused unless its command line still identifies Collie (8693667)
+- Windows updates now hand control to the freshly pulled script, replace the in-use native launcher after it exits, and report failed Herdr re-links; uninstall always removes the scheduled task even when Tailscale mapping cleanup still requires Administrator PowerShell (73488d4, cc71d8e)
+- The Windows supervisor retains the most recent crashed bridge's stdout and stderr across its automatic restart, so the `logs` command keeps the failure evidence (3c9e0e0)
+- Tailscale Serve runs non-interactively from plugin actions after the tailnet's one-time HTTPS consent, instead of leaving the action waiting on a hidden prompt (8e8c94b)
+- Backend fixtures use native path helpers, so all 523 bridge tests run on Windows; the two POSIX `0600` assertions are explicitly Unix-only because Windows does not expose those mode bits (8693667)
 
 ## [0.23.0] - 2026-08-03
 

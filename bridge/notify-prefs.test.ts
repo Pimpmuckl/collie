@@ -10,6 +10,7 @@ import { loadConfig } from "./config.ts";
 // is verified through a throwaway temp state dir (mirrors snooze.test.ts / push.test.ts).
 
 const dirs: string[] = [];
+const posixTest = process.platform === "win32" ? test.skip : test;
 async function tempCfg() {
   const stateDir = await mkdtemp(join(tmpdir(), "collie-notify-prefs-"));
   dirs.push(stateDir);
@@ -75,7 +76,7 @@ describe("NotifyPrefsStore", () => {
     expect(store.current()).toEqual(DEFAULT_NOTIFY_PREFS);
   });
 
-  test("persists with owner-only (0600) permissions", async () => {
+  posixTest("persists with owner-only (0600) permissions", async () => {
     const cfg = await tempCfg();
     const store = new NotifyPrefsStore(cfg);
     await store.set({ blocked: false });

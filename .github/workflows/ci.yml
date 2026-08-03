@@ -13,21 +13,28 @@ concurrency:
 jobs:
   check:
     name: typecheck + tests
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Standard hosted runners are free for this public fork. Do not use billed larger runners.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
 
       # The MANDATORY invariant: the three version files + the newest CHANGELOG heading must agree.
       - name: Version consistency
-        run: bash scripts/check-version.sh
+        run: bun run scripts/check-version.ts
 
       - name: Install (root)
         run: bun install --frozen-lockfile
       - name: Typecheck (root)
         run: bun run typecheck
       - name: Test (bridge)
-        run: bun run test
+        run: bun test ./bridge
+      - name: Test launcher lifecycle
+        run: bun run test:ctl
 
       - name: Install (web)
         run: cd web && bun install --frozen-lockfile
