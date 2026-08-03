@@ -16,7 +16,7 @@ All notable changes to Collie are recorded here. The format follows
 ### Fixed
 
 - Stopping or restarting the Windows task now terminates only its recorded PowerShell/Bun process tree, so Task Scheduler cannot strand an old bridge on port 8787. A stale or reused PID is refused unless its command line still identifies Collie (8693667)
-- Windows updates now hand control to the freshly pulled script, preserve the in-use native launcher, and report failed Herdr re-links; uninstall always removes the scheduled task even when Tailscale mapping cleanup still requires Administrator PowerShell (73488d4)
+- Windows updates now hand control to the freshly pulled script, replace the in-use native launcher after it exits, and report failed Herdr re-links; uninstall always removes the scheduled task even when Tailscale mapping cleanup still requires Administrator PowerShell (73488d4, cc71d8e)
 - Backend fixtures use native path helpers, so all 523 bridge tests run on Windows; the two POSIX `0600` assertions are explicitly Unix-only because Windows does not expose those mode bits (8693667)
 
 ## [0.23.0] - 2026-08-03
