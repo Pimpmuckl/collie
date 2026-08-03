@@ -6,6 +6,12 @@ All notable changes to Collie are recorded here. The format follows
 `version` in `herdr-plugin.toml`, `package.json`, and `web/package.json` (enforced by
 `scripts/check-version.ts`). See [`CLAUDE.md`](./CLAUDE.md) → *Versioning* for the bump policy.
 
+## [0.24.3] - 2026-08-03
+
+### Fixed
+
+- A first-run Windows `start` rebuilds only the missing application bundle and never tries to replace its own running launcher (5134556)
+
 ## [0.24.2] - 2026-08-03
 
 ### Fixed
